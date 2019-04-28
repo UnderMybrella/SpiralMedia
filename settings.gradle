@@ -1,0 +1,4 @@
+rootProject.name = 'SpiralMedia'
+
+include ':media'
+include ':i686-linux', ':i686-win', ':x86_64-linux', ':x86_64-macos', ':x86_64-win'

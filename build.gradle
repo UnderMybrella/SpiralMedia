@@ -1,0 +1,166 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version '1.3.10'
+    id 'com.github.johnrengelman.shadow' version '4.0.3'
+}
+
+ext {
+    artifact_group = 'info.spiralframework'
+    project_version = "${System.getenv('GIT_COMMIT') ?: "unknown"}".substring(0, 7)
+
+    jackson_version = '2.9.4'
+    sfl4j_version = '1.7.25'
+    imperator_version = '8ef2bb7'
+    logback_version = '1.2.3'
+    fuel_version = '2.0.1'
+}
+
+allprojects {
+    apply plugin: 'java'
+    apply plugin: 'kotlin'
+
+    group = artifact_group
+    version = project_version
+    sourceCompatibility = 1.8
+
+    configurations {
+        compileInclude
+
+        compile.extendsFrom(compileInclude)
+    }
+
+    jar {
+        baseName = "spiral"
+        appendix = "$project.name"
+        version = ""
+    }
+
+    task sourcesJar(type: Jar, dependsOn: classes) {
+        classifier = 'sources'
+        baseName = jar.baseName
+        appendix = jar.appendix
+        version = jar.version
+        from sourceSets.main.allSource
+    }
+
+    task javadocJar(type: Jar, dependsOn: javadoc) {
+        classifier = 'javadoc'
+        baseName = jar.baseName
+        appendix = jar.appendix
+        version = jar.version
+        from javadoc.destinationDir
+    }
+
+    artifacts {
+        archives sourcesJar
+        archives javadocJar
+    }
+
+    repositories {
+        mavenCentral()
+        jcenter()
+        maven {
+            url "https://maven.abimon.org"
+        }
+    }
+
+    compileKotlin {
+        kotlinOptions.jvmTarget = "1.8"
+    }
+    compileTestKotlin {
+        kotlinOptions.jvmTarget = "1.8"
+    }
+
+    kotlin.sourceSets.all {
+        languageSettings.useExperimentalAnnotation('kotlin.ExperimentalUnsignedTypes')
+    }
+}
+
+subprojects {
+    apply plugin: 'com.github.johnrengelman.shadow'
+
+    sourceSets {
+        main {
+            java {
+                srcDirs = []
+            }
+            kotlin {
+                srcDirs = []
+            }
+//            resources {
+//                srcDirs = []
+//            }
+        }
+
+        test {
+            java {
+                srcDirs = []
+            }
+            kotlin {
+                srcDirs = []
+            }
+            resources {
+                srcDirs = []
+            }
+        }
+    }
+
+    shadowJar {
+        mergeServiceFiles()
+        baseName = "spiral"
+        appendix = "media"
+        classifier = "$project.name"
+        version = jar.version
+
+        from project(":media").sourceSets.main.output
+
+        configurations = [project.configurations.compileInclude]
+
+//        manifest {
+//            attributes 'Humble-Native-App': 'humblevideo'
+//            attributes 'Humble-Native-Paths': '.'
+//            attributes 'Humble-Native-Root': '.'
+//        }
+    }
+
+    dependencies {
+        compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.3.10"
+        compile "org.jetbrains.kotlin:kotlin-reflect:1.3.10"
+        compile 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.1.1'
+
+        compile "info.spiralframework:spiral-console:79b9903"
+
+        //compileInclude "io.humble:humble-video-noarch:0.3.0"
+        compileInclude "net.bramp.ffmpeg:ffmpeg:0.6.2"
+
+        testCompile group: 'junit', name: 'junit', version: '4.12'
+    }
+}
+
+task buildLibs()
+
+subprojects { Project subProject ->
+    if (subProject.name == "media")
+        return
+
+    task copyArtifacts {
+        doLast {
+            def DIST_DIR = "$rootProject.buildDir${File.separator}dist"
+            def SRC_DIR = "${subProject.buildDir}${File.separator}libs"
+
+            ant.mkdir(dir: DIST_DIR)
+            ant.copy(todir: DIST_DIR) {
+                fileset(dir: SRC_DIR,
+                        includes: "spiral-media*.jar")
+            }
+        }
+    }
+
+    afterEvaluate {
+        def shadowJarTask = subProject.tasks.find { it.name == 'shadowJar' }
+        if (shadowJarTask) {
+            shadowJarTask.finalizedBy(copyArtifacts)
+            buildLibs.dependsOn(shadowJarTask)
+        }
+    }
+}
